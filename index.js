@@ -4,7 +4,15 @@ const session = require("express-session");
 const cors = require("cors");
 const passport = require("passport");
 const passportInit = require("./passport");
-const { createUser, getUserById } = require("./pg");
+const {
+  createUser,
+  getUserById,
+  reAuthenticate,
+  changePassword,
+  changeEmail,
+  getSubreddits,
+  getSubreddit,
+} = require("./pg");
 
 passportInit(passport);
 
@@ -70,6 +78,45 @@ app.post("/initAuth", async (req, res) => {
     }
   }
   res.status(400).send("Session expired or no longer exists.");
+});
+
+app.post("/changePassword", async (req, res) => {
+  const id = req.body.id;
+  const password = req.body.password;
+  const newPassword = req.body.newPassword;
+  reAuthenticate(id, password)
+    .then(() => {
+      changePassword(id, newPassword)
+        .then(res.sendStatus(200))
+        .catch((err) => res.status(401).send(err));
+    })
+    .catch((err) => res.status(401).send(err));
+});
+
+app.post("/changeEmail", async (req, res) => {
+  const id = req.body.id;
+  const email = req.body.email;
+  const password = req.body.password;
+  reAuthenticate(id, password)
+    .then(() => {
+      changeEmail(id, email)
+        .then(res.sendStatus(200))
+        .catch((err) => res.status(401).send(err));
+    })
+    .catch((err) => res.status(401).send(err));
+});
+
+app.get("/subreddits", async (req, res) => {
+  getSubreddits()
+    .then((data) => res.send(data))
+    .catch((err) => res.status(200).send(err));
+});
+
+app.get("/subreddit/:subreddit", async (req, res) => {
+  const subreddit = req.params.subreddit;
+  getSubreddit(subreddit)
+    .then((data) => res.send(data))
+    .catch((err) => res.status(200).send(err));
 });
 
 app.listen(PORT, () => {
