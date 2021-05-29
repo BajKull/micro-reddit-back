@@ -12,6 +12,9 @@ const {
   changeEmail,
   getSubreddits,
   getSubreddit,
+  createSubreddit,
+  createPost,
+  likePost,
 } = require("./pg");
 
 passportInit(passport);
@@ -81,9 +84,7 @@ app.post("/initAuth", async (req, res) => {
 });
 
 app.post("/changePassword", async (req, res) => {
-  const id = req.body.id;
-  const password = req.body.password;
-  const newPassword = req.body.newPassword;
+  const { id, password, newPassword } = req.body;
   reAuthenticate(id, password)
     .then(() => {
       changePassword(id, newPassword)
@@ -94,9 +95,7 @@ app.post("/changePassword", async (req, res) => {
 });
 
 app.post("/changeEmail", async (req, res) => {
-  const id = req.body.id;
-  const email = req.body.email;
-  const password = req.body.password;
+  const { id, email, password } = req.body;
   reAuthenticate(id, password)
     .then(() => {
       changeEmail(id, email)
@@ -109,14 +108,32 @@ app.post("/changeEmail", async (req, res) => {
 app.get("/subreddits", async (req, res) => {
   getSubreddits()
     .then((data) => res.send(data))
-    .catch((err) => res.status(200).send(err));
+    .catch((err) => res.status(401).send(err));
 });
 
 app.get("/subreddit/:subreddit", async (req, res) => {
   const subreddit = req.params.subreddit;
-  getSubreddit(subreddit)
+  const user = req.query.user;
+  getSubreddit(subreddit, user)
     .then((data) => res.send(data))
-    .catch((err) => res.status(200).send(err));
+    .catch((err) => res.status(401).send(err));
+});
+
+app.post("/createSubreddit", async (req, res) => {
+  const { name, desc, user } = req.body;
+  createSubreddit(name, desc, user)
+    .then((data) => res.send(data))
+    .catch((err) => res.status(401).send(err));
+});
+
+app.post("/createPost", async (req, res) => {
+  createPost(req.body.data)
+    .then((data) => res.send(data))
+    .catch((err) => res.status(401).send(err));
+});
+
+app.post("/likePost", (req, res) => {
+  likePost(req.body.data);
 });
 
 app.listen(PORT, () => {
