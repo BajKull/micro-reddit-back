@@ -8,9 +8,38 @@ const pool = new Pool({
   port: process.env.PG_PORT,
 });
 
+const howToSort = (s) => {
+  if (s === "newest") return "ORDER BY post.creation_date DESC";
+  if (s === "popular") return "ORDER BY votes DESC, comments DESC";
+  return "";
+};
+
 const getUserById = async (id) => {
   const user = await pool.query(`SELECT * FROM reddit_user WHERE id = ${id};`);
   return user.rows[0];
+};
+
+const getUserByName = async (username = null, id = null) => {
+  let u;
+  if (username) {
+    u = await pool.query(
+      `SELECT * FROM reddit_user WHERE nickname = '${username}'`
+    );
+  } else {
+    u = await pool.query(`SELECT * FROM reddit_user WHERE id = ${id}`);
+  }
+  u = u.rows[0];
+  const subredditsQ = await pool.query(
+    `SELECT name FROM subreddit_user INNER JOIN subreddit ON subreddit_user.subreddit_id = subreddit.id WHERE user_id = ${u.id}`
+  );
+  const subreddits = subredditsQ.rows.map((r) => r.name);
+  const user = {
+    id: u.id,
+    username: u.nickname,
+    email: u.email,
+    subreddits,
+  };
+  return user;
 };
 
 const createUser = async (user) => {
@@ -96,18 +125,17 @@ const getSubreddits = async () => {
   });
 };
 
-const getSubreddit = async (name, user = null) => {
+const getSubreddit = async (name, user = null, sort = null) => {
   return new Promise(async (res, rej) => {
     const subreddit = await pool
       .query(
-        `
-        SELECT subreddit.name, post.id, post.title, post.content, post.image_path, post.video_url, COUNT(comment.id) AS comments, COALESCE(SUM(post_vote.vote), 0) as votes
-        FROM subreddit 
-        LEFT JOIN post ON subreddit.id = post.subreddit_id 
-        LEFT JOIN post_vote on post.id = post_vote.post_id 
-        LEFT JOIN comment ON post.id = comment.post_id 
-        WHERE subreddit.name = '${name}' 
-        GROUP BY subreddit.name, post.id, post.title, post.content, post.image_path, post.video_url;`
+        `        
+        select post.id, post.creation_date, post.title, post.content, post.image_path, post.video_url, subreddit.name, 
+        (SELECT COUNT(comment.id) as comments FROM comment WHERE post.id = comment.post_id), 
+        (SELECT COALESCE(SUM(vote), 0) as votes FROM post_vote WHERE post_id = post.id) 
+        FROM post inner join subreddit on subreddit.id = post.subreddit_id 
+        WHERE post.id IS NOT NULL AND subreddit.name = '${name}'
+        ${howToSort(sort)}`
       )
       .catch(() => {
         rej(`Couldn't connect to the database.`);
@@ -211,7 +239,6 @@ const createPost = (data) => {
 
 const likePost = async (data) => {
   const { value, postId, userId } = data;
-  console.log(data);
   if (!value || !postId || !userId) return;
   const alreadyLikedQ = await pool.query(
     `SELECT * FROM post_vote WHERE post_id = ${postId} AND user_id = ${userId}`
@@ -233,9 +260,80 @@ const likePost = async (data) => {
   }
 };
 
+const joinSubreddit = async (data) => {
+  const { subredditId, userId } = data;
+  const idQ = await pool.query(
+    `SELECT id FROM subreddit WHERE name = '${subredditId}'`
+  );
+  if (idQ.rows.length === 0) return;
+  const id = idQ.rows[0].id;
+  const memberQ = await pool.query(
+    `SELECT * FROM subreddit_user WHERE user_id = ${userId} AND subreddit_id = ${id}`
+  );
+  if (memberQ.rows.length > 0) {
+    pool.query(
+      `DELETE FROM subreddit_user WHERE user_id = ${userId} AND subreddit_id = ${id}`
+    );
+  } else
+    pool.query(
+      `INSERT INTO subreddit_user (user_id, subreddit_id) VALUES (${userId}, ${id})`
+    );
+};
+
+const getLanding = (data) => {
+  return new Promise(async (res, rej) => {
+    const { userId, sort } = data;
+
+    if (userId) {
+      const landingQ = await pool
+        .query(
+          `
+          select post.id, post.creation_date, post.title, post.content, post.image_path, post.video_url, subreddit.name, 
+          (SELECT COUNT(comment.id) as comments FROM comment WHERE post.id = comment.post_id), 
+          (SELECT COALESCE(SUM(vote), 0) as votes FROM post_vote WHERE post_id = post.id) 
+          FROM post 
+          inner join subreddit on subreddit.id = post.subreddit_id 
+          inner join subreddit_user on subreddit.id = subreddit_user.subreddit_id
+          WHERE post.id IS NOT NULL AND subreddit_user.user_id = ${userId}
+          ${howToSort(sort)}`
+        )
+        .catch(() => {
+          rej(`Couldn't connect to the database.`);
+          return;
+        });
+      const userVotes = await pool.query(
+        `SELECT * FROM post_vote WHERE user_id = ${userId}`
+      );
+      userVotes.rows.forEach((vote) => {
+        const s = landingQ.rows.find((r) => r.id === vote.post_id);
+        if (s)
+          landingQ.rows.find((r) => r.id === vote.post_id).voted = vote.vote;
+      });
+      res(landingQ.rows);
+    } else {
+      const landingQ = await pool
+        .query(
+          `
+          select post.id, post.creation_date, post.title, post.content, post.image_path, post.video_url, subreddit.name, 
+          (SELECT COUNT(comment.id) as comments FROM comment WHERE post.id = comment.post_id), 
+          (SELECT COALESCE(SUM(vote), 0) as votes FROM post_vote WHERE post_id = post.id) 
+          FROM post inner join subreddit on subreddit.id = post.subreddit_id 
+          WHERE post.id IS NOT NULL
+          ${howToSort(sort)}`
+        )
+        .catch(() => {
+          rej(`Couldn't connect to the database.`);
+          return;
+        });
+      res(landingQ.rows);
+    }
+  });
+};
+
 module.exports = {
   pool,
   getUserById,
+  getUserByName,
   createUser,
   reAuthenticate,
   changePassword,
@@ -245,4 +343,6 @@ module.exports = {
   createSubreddit,
   createPost,
   likePost,
+  joinSubreddit,
+  getLanding,
 };

@@ -6,7 +6,6 @@ const passport = require("passport");
 const passportInit = require("./passport");
 const {
   createUser,
-  getUserById,
   reAuthenticate,
   changePassword,
   changeEmail,
@@ -15,6 +14,9 @@ const {
   createSubreddit,
   createPost,
   likePost,
+  getUserByName,
+  joinSubreddit,
+  getLanding,
 } = require("./pg");
 
 passportInit(passport);
@@ -41,8 +43,8 @@ app.get("/", (req, res) => {
   res.send("hello world");
 });
 
-app.post("/signIn", passport.authenticate("local"), (req, res) => {
-  const user = req.user;
+app.post("/signIn", passport.authenticate("local"), async (req, res) => {
+  const user = await getUserByName(req.user.nickname);
   req.login(user, (err) => {
     if (err) console.log(err);
   });
@@ -60,7 +62,10 @@ app.post("/signOut", (req, res) => {
 app.post("/signUp", (req, res) => {
   const user = req.body;
   createUser(user)
-    .then((u) => res.send(u))
+    .then(async () => {
+      const resUser = await getUserByName(user.name);
+      res(resUser);
+    })
     .catch((err) => {
       res.status(400).send(err);
     });
@@ -72,9 +77,8 @@ app.post("/initAuth", async (req, res) => {
   if (session) {
     const userId = JSON.parse(session).passport.user;
     if (userId) {
-      const user = await getUserById(userId);
+      const user = await getUserByName(null, userId);
       if (user) {
-        delete user.password;
         res.send(user);
         return;
       }
@@ -113,8 +117,9 @@ app.get("/subreddits", async (req, res) => {
 
 app.get("/subreddit/:subreddit", async (req, res) => {
   const subreddit = req.params.subreddit;
+  const sort = req.params.sort;
   const user = req.query.user;
-  getSubreddit(subreddit, user)
+  getSubreddit(subreddit, user, sort)
     .then((data) => res.send(data))
     .catch((err) => res.status(401).send(err));
 });
@@ -134,6 +139,16 @@ app.post("/createPost", async (req, res) => {
 
 app.post("/likePost", (req, res) => {
   likePost(req.body.data);
+});
+
+app.post("/joinSubreddit", (req, res) => {
+  joinSubreddit(req.body);
+});
+
+app.get("/getLanding", (req, res) => {
+  getLanding(req.query)
+    .then((data) => res.send(data))
+    .catch((err) => res.status(401).send(err));
 });
 
 app.listen(PORT, () => {
