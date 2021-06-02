@@ -10,6 +10,7 @@ const {
   changePassword,
   changeEmail,
   getSubreddits,
+  getSubredditsAll,
   getSubreddit,
   createSubreddit,
   createPost,
@@ -17,9 +18,13 @@ const {
   getUserByName,
   joinSubreddit,
   getLanding,
+  getSearch,
+  getPost,
 } = require("./pg");
+const { socketInit } = require("./socket.js");
 
 passportInit(passport);
+socketInit();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -63,10 +68,12 @@ app.post("/signUp", (req, res) => {
   const user = req.body;
   createUser(user)
     .then(async () => {
-      const resUser = await getUserByName(user.name);
-      res(resUser);
+      console.log(user);
+      const resUser = await getUserByName(user.username);
+      res.send(resUser);
     })
     .catch((err) => {
+      console.log(err);
       res.status(400).send(err);
     });
 });
@@ -110,18 +117,28 @@ app.post("/changeEmail", async (req, res) => {
 });
 
 app.get("/subreddits", async (req, res) => {
-  getSubreddits()
+  getSubreddits(req.query)
+    .then((data) => res.send(data))
+    .catch((err) => res.status(401).send(err));
+});
+app.get("/subredditsAll", async (req, res) => {
+  getSubredditsAll(req.query.sort)
     .then((data) => res.send(data))
     .catch((err) => res.status(401).send(err));
 });
 
 app.get("/subreddit/:subreddit", async (req, res) => {
   const subreddit = req.params.subreddit;
-  const sort = req.params.sort;
+  const sort = req.query.sort;
   const user = req.query.user;
+  console.log(subreddit, sort, user);
+
   getSubreddit(subreddit, user, sort)
     .then((data) => res.send(data))
-    .catch((err) => res.status(401).send(err));
+    .catch((err) => {
+      res.status(401).send(err);
+      console.log(err);
+    });
 });
 
 app.post("/createSubreddit", async (req, res) => {
@@ -149,6 +166,18 @@ app.get("/getLanding", (req, res) => {
   getLanding(req.query)
     .then((data) => res.send(data))
     .catch((err) => res.status(401).send(err));
+});
+
+app.get("/getSearch", (req, res) => {
+  getSearch(req.query)
+    .then((data) => res.send(data))
+    .catch((err) => res.status(400).send(err));
+});
+
+app.get("/getPost", (req, res) => {
+  getPost(req.query)
+    .then((data) => res.send(data))
+    .catch((err) => res.status(400).send(err));
 });
 
 app.listen(PORT, () => {
