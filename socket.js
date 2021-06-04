@@ -10,8 +10,6 @@ const io = require("socket.io")(httpServer, {
 
 const socketInit = () => {
   io.on("connection", (socket) => {
-    console.log(`${socket.id} connected`);
-
     socket.on("joinRoom", ({ path }) => {
       socket.join(path);
     });
@@ -23,13 +21,20 @@ const socketInit = () => {
         .to(path)
         .emit("commentReceive", { nickname: user.username, content });
     });
-    socket.on("deletePost", async ({ path, subredditName, user, id }) => {
-      deletePost({ subredditName, user, id })
-        .then(() => {
-          socket.to(path).emit("deletePost", { id });
-        })
-        .catch(() => {});
-    });
+    socket.on(
+      "deletePost",
+      async ({ path, subredditName, user, id }, callback) => {
+        deletePost({ subredditName, user, id })
+          .then(() => {
+            socket
+              .to(`/r/${subredditName}`)
+              .to(`/r/${subredditName}/${id}`)
+              .emit("deletePost", { id });
+            callback(true);
+          })
+          .catch(() => {});
+      }
+    );
     socket.on("deleteComment", ({ path, user, id, subredditName }) => {
       deleteComment({ subredditName, user, id })
         .then(() => {

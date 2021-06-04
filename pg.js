@@ -105,12 +105,12 @@ const changePassword = async (id, password) => {
   });
 };
 
-const changeEmail = async (id, email) => {
+const changeEmail = async ({ id, email }) => {
   return new Promise(async (res, rej) => {
-    const email = await pool.query(
+    const emailQ = await pool.query(
       `SELECT email FROM reddit_user WHERE email = '${email}'`
     );
-    if (email.rows.length > 0) {
+    if (emailQ.rows.length > 0) {
       rej(`Email adress is already taken.`);
       return;
     }
@@ -124,8 +124,9 @@ const changeEmail = async (id, email) => {
   });
 };
 
-const getSubredditsAll = async (sort) => {
+const getSubredditsAll = async (data) => {
   return new Promise(async (res, rej) => {
+    const { sort, limit } = data;
     const subreddits = await pool
       .query(
         `
@@ -134,7 +135,8 @@ const getSubredditsAll = async (sort) => {
         (SELECT COALESCE(COUNT(id), 0) as posts FROM post WHERE subreddit.id = post.subreddit_id) 
         FROM subreddit inner join subreddit_user on subreddit.id = subreddit_user.subreddit_id 
         GROUP BY subreddit.name, subreddit.id, subreddit.description 
-        ${howToSortSubreddits(sort)}
+        ${howToSortSubreddits(sort)} 
+        ${limit === "true" ? "LIMIT 5" : ""}
         `
       )
       .catch(() => {
@@ -156,9 +158,10 @@ const getSubreddits = async (data) => {
         (SELECT COUNT(subreddit_user.id) as users FROM subreddit_user WHERE subreddit_id = subreddit.id),
         (SELECT COALESCE(COUNT(id), 0) as posts FROM post WHERE subreddit.id = post.subreddit_id) 
         FROM subreddit inner join subreddit_user on subreddit.id = subreddit_user.subreddit_id 
-        WHERE subreddit_user.user_id = 1
+        WHERE subreddit_user.user_id = ${user}
         GROUP BY subreddit.name, subreddit.id, subreddit.description 
         ${howToSortSubreddits(sort)}
+        LIMIT 5
         `
       )
       .catch(() => {

@@ -110,8 +110,8 @@ app.post("/changeEmail", async (req, res) => {
   const { id, email, password } = req.body;
   reAuthenticate(id, password)
     .then(() => {
-      changeEmail(id, email)
-        .then(res.sendStatus(200))
+      changeEmail({ id, email })
+        .then(() => res.sendStatus(200))
         .catch((err) => res.status(401).send(err));
     })
     .catch((err) => res.status(401).send(err));
@@ -123,7 +123,7 @@ app.get("/subreddits", async (req, res) => {
     .catch((err) => res.status(401).send(err));
 });
 app.get("/subredditsAll", async (req, res) => {
-  getSubredditsAll(req.query.sort)
+  getSubredditsAll(req.query)
     .then((data) => res.send(data))
     .catch((err) => res.status(401).send(err));
 });
