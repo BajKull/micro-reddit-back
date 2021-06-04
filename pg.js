@@ -37,12 +37,16 @@ const getUserByName = async (username = null, id = null) => {
   const subredditsQ = await pool.query(
     `SELECT name FROM subreddit_user INNER JOIN subreddit ON subreddit_user.subreddit_id = subreddit.id WHERE user_id = ${u.id}`
   );
+  const moderatorQ = await pool.query(
+    `SELECT subreddit.name FROM subreddit_moderator INNER JOIN subreddit on subreddit_moderator.subreddit_id = subreddit.id WHERE user_id = ${u.id}`
+  );
   const subreddits = subredditsQ.rows.map((r) => r.name);
   const user = {
     id: u.id,
     username: u.nickname,
     email: u.email,
     subreddits,
+    moderator: moderatorQ.rows.map((m) => m.name),
   };
   return user;
 };
@@ -238,6 +242,7 @@ const createPost = (data) => {
     await pool
       .query(
         `
+        SET TIMEZONE = 'Europe/Warsaw';
       INSERT INTO post (title, content${image ? ", image" : ""}${
           video ? ", video" : ""
         }, creation_date, subreddit_id, user_id)
@@ -460,6 +465,54 @@ const addComment = (data) => {
     .catch((err) => console.log(err));
 };
 
+const subredditEdit = (data) => {
+  return new Promise(async (res, rej) => {
+    const { user, subredditId, description } = data;
+    const privileged = await pool
+      .query(
+        `SELECT * FROM subreddit_moderator INNER JOIN subreddit ON subreddit_moderator.subreddit_id = subreddit.id WHERE subreddit_moderator.user_id = ${user} AND subreddit.name ='${subredditId}'`
+      )
+      .catch(() => {
+        rej(`Couldn't connect to the database.`);
+        return;
+      });
+    if (privileged.rows.length === 0) {
+      rej("Not priveleged.");
+      return;
+    }
+    await pool
+      .query(
+        `UPDATE subreddit SET description = '${description}' WHERE name = '${subredditId}'`
+      )
+      .catch(() => {
+        rej(`Couldn't connect to the database.`);
+        return;
+      });
+    res(true);
+  });
+};
+
+const deletePost = (data) => {
+  return new Promise(async (res, rej) => {
+    const { user, subredditName, id } = data;
+    const isModerator = await pool.query(
+      `SELECT * FROM subreddit_moderator 
+      INNER JOIN subreddit ON subreddit_moderator.subreddit_id = subreddit.id 
+      WHERE user_id = ${user.id} AND subreddit.name = '${subredditName}'`
+    );
+    if (isModerator.rows.length === 0) {
+      rej("Not a moderator.");
+      return;
+    }
+    await pool.query(`
+    delete from post_vote where post_id = ${id};
+    delete from comment where post_id = ${id};
+    DELETE FROM post WHERE id = ${id};
+    `);
+    res(true);
+  });
+};
+
 module.exports = {
   pool,
   getUserById,
@@ -479,4 +532,6 @@ module.exports = {
   getSearch,
   getPost,
   addComment,
+  subredditEdit,
+  deletePost,
 };

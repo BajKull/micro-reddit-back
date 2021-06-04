@@ -1,4 +1,4 @@
-const { addComment } = require("./pg");
+const { addComment, deletePost } = require("./pg");
 
 const httpServer = require("http").createServer();
 const io = require("socket.io")(httpServer, {
@@ -12,18 +12,24 @@ const socketInit = () => {
   io.on("connection", (socket) => {
     console.log(`${socket.id} connected`);
 
-    socket.on("joinComments", ({ path }) => {
+    socket.on("joinRoom", ({ path }) => {
       socket.join(path);
-      console.log(socket.rooms);
     });
 
     socket.on("commentSend", ({ path, user, content, postId }) => {
-      console.log(path);
       const data = { userId: user.id, content, postId };
       addComment(data);
       socket
         .to(path)
         .emit("commentReceive", { nickname: user.username, content });
+    });
+    socket.on("deletePost", async ({ path, subredditName, user, id }) => {
+      deletePost({ subredditName, user, id })
+        .then(() => {
+          console.log(path);
+          socket.to(path).emit("deletePost", { id });
+        })
+        .catch(() => {});
     });
   });
 

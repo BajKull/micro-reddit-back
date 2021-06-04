@@ -20,6 +20,8 @@ const {
   getLanding,
   getSearch,
   getPost,
+  subredditEdit,
+  deletePost,
 } = require("./pg");
 const { socketInit } = require("./socket.js");
 
@@ -68,7 +70,6 @@ app.post("/signUp", (req, res) => {
   const user = req.body;
   createUser(user)
     .then(async () => {
-      console.log(user);
       const resUser = await getUserByName(user.username);
       res.send(resUser);
     })
@@ -131,7 +132,6 @@ app.get("/subreddit/:subreddit", async (req, res) => {
   const subreddit = req.params.subreddit;
   const sort = req.query.sort;
   const user = req.query.user;
-  console.log(subreddit, sort, user);
 
   getSubreddit(subreddit, user, sort)
     .then((data) => res.send(data))
@@ -150,7 +150,7 @@ app.post("/createSubreddit", async (req, res) => {
 
 app.post("/createPost", async (req, res) => {
   createPost(req.body.data)
-    .then((data) => res.send(data))
+    .then(() => res.sendStatus(200))
     .catch((err) => res.status(401).send(err));
 });
 
@@ -177,6 +177,18 @@ app.get("/getSearch", (req, res) => {
 app.get("/getPost", (req, res) => {
   getPost(req.query)
     .then((data) => res.send(data))
+    .catch((err) => res.status(400).send(err));
+});
+
+app.post("/subredditEdit", (req, res) => {
+  subredditEdit(req.body)
+    .then(() => res.sendStatus(200))
+    .catch((err) => res.status(400).send(err));
+});
+
+app.post("/deletePost", (req, res) => {
+  deletePost(req.body)
+    .then(() => res.sendStatus(200))
     .catch((err) => res.status(400).send(err));
 });
 
