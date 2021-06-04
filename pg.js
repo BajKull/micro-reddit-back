@@ -418,11 +418,11 @@ const getPost = (data) => {
     const postQ = await pool
       .query(
         `
-    select post.id, post.creation_date, post.title, post.content, post.image_path, post.video_url, subreddit.name, 
-    (SELECT COUNT(comment.id) as comments FROM comment WHERE post.id = comment.post_id), 
-    (SELECT COALESCE(SUM(vote), 0) as votes FROM post_vote WHERE post_id = post.id) 
-    FROM post inner join subreddit on subreddit.id = post.subreddit_id 
-    WHERE post.id = ${postId}`
+        select post.id, post.creation_date, post.title, post.content, post.image_path, post.video_url, subreddit.name, 
+        (SELECT COUNT(comment.id) as comments FROM comment WHERE post.id = comment.post_id), 
+        (SELECT COALESCE(SUM(vote), 0) as votes FROM post_vote WHERE post_id = post.id) 
+        FROM post inner join subreddit on subreddit.id = post.subreddit_id 
+        WHERE post.id = ${postId}`
       )
       .catch(() => {
         rej(`Couldn't connect to the database.`);
@@ -431,12 +431,11 @@ const getPost = (data) => {
     const commentsQ = await pool
       .query(
         `
-    select post.title, comment.post_id, comment.content, reddit_user.nickname 
-    from post 
-    left join comment on post.id = comment.post_id 
-    left join reddit_user on comment.user_id = reddit_user.id 
-    where post.id = ${postId} AND comment.post_id IS NOT NULL
-    `
+        select post.title, comment.post_id, comment.id, comment.content, reddit_user.nickname 
+        from post 
+        left join comment on post.id = comment.post_id 
+        left join reddit_user on comment.user_id = reddit_user.id 
+        where post.id = ${postId} AND comment.post_id IS NOT NULL`
       )
       .catch(() => {
         rej(`Couldn't connect to the database.`);
@@ -459,8 +458,7 @@ const addComment = (data) => {
   const { content, userId, postId } = data;
   pool
     .query(
-      `
-    INSERT INTO comment (content, user_id, post_id) VALUES ('${content}', ${userId}, ${postId})`
+      `INSERT INTO comment (content, user_id, post_id) VALUES ('${content}', ${userId}, ${postId})`
     )
     .catch((err) => console.log(err));
 };
@@ -470,7 +468,9 @@ const subredditEdit = (data) => {
     const { user, subredditId, description } = data;
     const privileged = await pool
       .query(
-        `SELECT * FROM subreddit_moderator INNER JOIN subreddit ON subreddit_moderator.subreddit_id = subreddit.id WHERE subreddit_moderator.user_id = ${user} AND subreddit.name ='${subredditId}'`
+        `SELECT * FROM subreddit_moderator 
+        INNER JOIN subreddit ON subreddit_moderator.subreddit_id = subreddit.id 
+        WHERE subreddit_moderator.user_id = ${user} AND subreddit.name ='${subredditId}'`
       )
       .catch(() => {
         rej(`Couldn't connect to the database.`);
@@ -495,20 +495,57 @@ const subredditEdit = (data) => {
 const deletePost = (data) => {
   return new Promise(async (res, rej) => {
     const { user, subredditName, id } = data;
-    const isModerator = await pool.query(
-      `SELECT * FROM subreddit_moderator 
-      INNER JOIN subreddit ON subreddit_moderator.subreddit_id = subreddit.id 
-      WHERE user_id = ${user.id} AND subreddit.name = '${subredditName}'`
-    );
+    const isModerator = await pool
+      .query(
+        `SELECT * FROM subreddit_moderator 
+        INNER JOIN subreddit ON subreddit_moderator.subreddit_id = subreddit.id 
+        WHERE user_id = ${user.id} AND subreddit.name = '${subredditName}'`
+      )
+      .catch(() => {
+        rej(`Couldn't connect to the database.`);
+        return;
+      });
     if (isModerator.rows.length === 0) {
       rej("Not a moderator.");
       return;
     }
-    await pool.query(`
-    delete from post_vote where post_id = ${id};
-    delete from comment where post_id = ${id};
-    DELETE FROM post WHERE id = ${id};
-    `);
+    await pool
+      .query(
+        `
+        delete from post_vote where post_id = ${id};
+        delete from comment where post_id = ${id};
+        DELETE FROM post WHERE id = ${id}`
+      )
+      .catch(() => {
+        rej(`Couldn't connect to the database.`);
+        return;
+      });
+    res(true);
+  });
+};
+
+const deleteComment = (data) => {
+  return new Promise(async (res, rej) => {
+    const { user, id, subredditName } = data;
+    console.log(data);
+    const isModerator = await pool
+      .query(
+        `SELECT * FROM subreddit_moderator 
+      INNER JOIN subreddit ON subreddit_moderator.subreddit_id = subreddit.id 
+      WHERE user_id = ${user.id} AND subreddit.name = '${subredditName}'`
+      )
+      .catch(() => {
+        rej(`Couldn't connect to the database.`);
+        return;
+      });
+    if (isModerator.rows.length === 0) {
+      rej("Not a moderator.");
+      return;
+    }
+    await pool.query(`delete from comment where id = ${id}`).catch(() => {
+      rej(`Couldn't connect to the database.`);
+      return;
+    });
     res(true);
   });
 };
@@ -534,4 +571,5 @@ module.exports = {
   addComment,
   subredditEdit,
   deletePost,
+  deleteComment,
 };
