@@ -246,8 +246,8 @@ const createPost = (data) => {
       .query(
         `
         SET TIMEZONE = 'Europe/Warsaw';
-      INSERT INTO post (title, content${image ? ", image" : ""}${
-          video ? ", video" : ""
+      INSERT INTO post (title, content${image ? ", image_path" : ""}${
+          video ? ", video_url" : ""
         }, creation_date, subreddit_id, user_id)
       VALUES ('${name}', '${content}'${image ? ", '" + image + "'" : ""}${
           video ? ", '" + video + "'" : ""
@@ -416,7 +416,7 @@ const getSearch = (data) => {
 };
 
 const getPost = (data) => {
-  const { postId, user } = data;
+  const { postId, userId } = data;
   return new Promise(async (res, rej) => {
     const postQ = await pool
       .query(
@@ -446,9 +446,9 @@ const getPost = (data) => {
       });
 
     const post = { ...postQ.rows[0], commentList: commentsQ.rows.reverse() };
-    if (user && user !== "noUser") {
+    if (userId) {
       const userVote = await pool.query(
-        `SELECT * FROM post_vote WHERE user_id = ${user} AND post_id = ${postId}`
+        `SELECT * FROM post_vote WHERE user_id = ${userId} AND post_id = ${postId}`
       );
       if (userVote.rows.length > 0) post.voted = userVote.rows[0].vote;
       else post.voted = 0;
@@ -458,12 +458,31 @@ const getPost = (data) => {
 };
 
 const addComment = (data) => {
-  const { content, userId, postId } = data;
-  pool
-    .query(
-      `INSERT INTO comment (content, user_id, post_id) VALUES ('${content}', ${userId}, ${postId})`
-    )
-    .catch((err) => console.log(err));
+  return new Promise(async (res, rej) => {
+    const { content, userId, postId } = data;
+    await pool
+      .query(
+        `INSERT INTO comment (content, user_id, post_id) VALUES ('${content}', ${userId}, ${postId})`
+      )
+      .catch(() => {
+        rej(`Couldn't connect to the database.`);
+        return;
+      });
+    const comment = await pool
+      .query(
+        `SELECT comment.post_id, comment.id, comment.content, reddit_user.nickname 
+        FROM comment 
+        left join reddit_user on comment.user_id = reddit_user.id 
+        WHERE content = '${content}' AND user_id = ${userId} AND post_id = ${postId}
+        order by id desc
+        `
+      )
+      .catch(() => {
+        rej(`Couldn't connect to the database.`);
+        return;
+      });
+    res(comment.rows[0]);
+  });
 };
 
 const subredditEdit = (data) => {
@@ -530,7 +549,6 @@ const deletePost = (data) => {
 const deleteComment = (data) => {
   return new Promise(async (res, rej) => {
     const { user, id, subredditName } = data;
-    console.log(data);
     const isModerator = await pool
       .query(
         `SELECT * FROM subreddit_moderator 

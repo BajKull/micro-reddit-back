@@ -14,12 +14,10 @@ const socketInit = () => {
       socket.join(path);
     });
 
-    socket.on("commentSend", ({ path, user, content, postId }) => {
+    socket.on("commentSend", async ({ path, user, content, postId }) => {
       const data = { userId: user.id, content, postId };
-      addComment(data);
-      socket
-        .to(path)
-        .emit("commentReceive", { nickname: user.username, content });
+      const comment = await addComment(data);
+      io.to(path).emit("commentReceive", comment);
     });
     socket.on(
       "deletePost",
