@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
 const cors = require("cors");
+const multer = require("multer");
 const passport = require("passport");
 const passportInit = require("./passport");
 const {
@@ -23,6 +24,7 @@ const {
   subredditEdit,
   deletePost,
 } = require("./pg");
+const { getImage } = require("./images");
 const { socketInit } = require("./socket.js");
 
 passportInit(passport);
@@ -30,6 +32,18 @@ socketInit();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+const formData = multer({
+  limits: { fieldSize: 10 * 1024 * 1024 },
+  storage: multer.diskStorage({
+    filename: (req, file, cb) => {
+      cb(null, file.originalname);
+    },
+    destination: (req, file, cb) => {
+      cb(null, "./images");
+    },
+  }),
+});
 
 app.use(cors({ origin: "http://localhost:8080" }));
 app.use(express.json());
@@ -148,8 +162,8 @@ app.post("/createSubreddit", async (req, res) => {
     .catch((err) => res.status(401).send(err));
 });
 
-app.post("/createPost", async (req, res) => {
-  createPost(req.body.data)
+app.post("/createPost", formData.single("image"), async (req, res) => {
+  createPost(req.file, req.body)
     .then(() => res.sendStatus(200))
     .catch((err) => res.status(401).send(err));
 });
@@ -190,6 +204,10 @@ app.post("/deletePost", (req, res) => {
   deletePost(req.body)
     .then(() => res.sendStatus(200))
     .catch((err) => res.status(400).send(err));
+});
+
+app.get("/getImage/:id", (req, res) => {
+  res.sendFile(`${__dirname}/images/${req.params.id}`);
 });
 
 app.listen(PORT, () => {

@@ -231,8 +231,10 @@ const createSubreddit = (name, desc, user) => {
   });
 };
 
-const createPost = (data) => {
-  const { name, content, image, video, survey, subredditId, userId } = data;
+const createPost = (image, data) => {
+  const { name, content, video, survey, subredditId, userId } = data;
+  if (data.survey === "null") data.survey = null;
+  if (data.video === "null") data.video = null;
   return new Promise(async (res, rej) => {
     const idQ = await pool
       .query(`SELECT id FROM subreddit WHERE name = '${subredditId}';`)
@@ -249,9 +251,9 @@ const createPost = (data) => {
       INSERT INTO post (title, content${image ? ", image_path" : ""}${
           video ? ", video_url" : ""
         }, creation_date, subreddit_id, user_id)
-      VALUES ('${name}', '${content}'${image ? ", '" + image + "'" : ""}${
-          video ? ", '" + video + "'" : ""
-        }, NOW(), ${id}, ${userId});
+      VALUES ('${name}', '${content}'${
+          image ? ", '" + image.path.split("\\").pop() + "'" : ""
+        }${video ? ", '" + video + "'" : ""}, NOW(), ${id}, ${userId});
     `
       )
       .catch(() => rej(`Couldn't connect to the database.`));
@@ -259,7 +261,7 @@ const createPost = (data) => {
       `SELECT id FROM post WHERE title = '${name}' AND content = '${content}' AND subreddit_id = ${id} AND user_id = ${userId}`
     );
     const postId = postQ.rows[0].id;
-    if (survey) {
+    if (survey !== "null") {
       await pool
         .query(
           `
